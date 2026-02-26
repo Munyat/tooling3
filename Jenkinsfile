@@ -4,7 +4,6 @@ pipeline {
     environment {
         DOCKER_HUB_CREDENTIALS = credentials('49502e9b-34fd-47d3-b38f-7678e4e91f29')
         IMAGE_NAME = 'briancheruiyot/tooling-frontend'
-        GIT_COMMIT_SHORT = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
     }
     
     stages {
@@ -14,12 +13,19 @@ pipeline {
             }
         }
         
-        stage('Build Docker Image') {
+        stage('Prepare Variables') {
             steps {
                 script {
                     BRANCH_NAME = env.BRANCH_NAME ?: 'main'
+                    GIT_COMMIT_SHORT = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
                     IMAGE_TAG = "${BRANCH_NAME}-${GIT_COMMIT_SHORT}"
-                    
+                }
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                script {
                     sh """
                         docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
                         docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${IMAGE_NAME}:latest
@@ -43,16 +49,16 @@ pipeline {
                           -e MYSQL_PASSWORD=testpass \
                           mysql:5.7
                           
+                        sleep 15
+                        
+                        # Run app container (NO port mapping needed)
+                        docker run -d --network test-network --name test-app \
+                          ${IMAGE_NAME}:latest
+                          
                         sleep 10
                         
-                        # Run app container
-                        docker run -d --network test-network --name test-app \
-                          -p 8085:80 ${IMAGE_NAME}:latest
-                          
-                        sleep 5
-                        
-                        # Test endpoint
-                        curl -f http://localhost:8085 || exit 1
+                        # Test endpoint using container name (Docker DNS)
+                        curl -f http://test-app || exit 1
                     """
                 }
             }
@@ -64,10 +70,7 @@ pipeline {
                     sh """
                         echo ${DOCKER_HUB_CREDENTIALS_PSW} | docker login -u ${DOCKER_HUB_CREDENTIALS_USR} --password-stdin
                         
-                        # Push branch-specific image
-                        docker push ${IMAGE_NAME}:${BRANCH_NAME}-${GIT_COMMIT_SHORT}
-                        
-                        # Always update latest tag
+                        docker push ${IMAGE_NAME}:${IMAGE_TAG}
                         docker push ${IMAGE_NAME}:latest
                     """
                 }
@@ -86,7 +89,7 @@ pipeline {
             cleanWs()
         }
         success {
-            echo "Pipeline completed successfully! Images pushed: ${IMAGE_NAME}:${BRANCH_NAME}-${GIT_COMMIT_SHORT} and ${IMAGE_NAME}:latest"
+            echo "Pipeline completed successfully! Image pushed: ${IMAGE_NAME}:${IMAGE_TAG}"
         }
         failure {
             echo "Pipeline failed!"
