@@ -13,20 +13,16 @@ pipeline {
             }
         }
         
-stage('Prepare Variables') {
-    steps {
-        script {
-            BRANCH_NAME = env.BRANCH_NAME ?: 'main'
-            
-            // Replace slashes with dash for Docker compatibility
-            SAFE_BRANCH_NAME = BRANCH_NAME.replaceAll('/', '-')
-            
-            GIT_COMMIT_SHORT = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
-            
-            IMAGE_TAG = "${SAFE_BRANCH_NAME}-${GIT_COMMIT_SHORT}"
+        stage('Prepare Variables') {
+            steps {
+                script {
+                    BRANCH_NAME = env.BRANCH_NAME ?: 'main'
+                    SAFE_BRANCH_NAME = BRANCH_NAME.replaceAll('/', '-')
+                    GIT_COMMIT_SHORT = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
+                    IMAGE_TAG = "${SAFE_BRANCH_NAME}-${GIT_COMMIT_SHORT}"
+                }
+            }
         }
-    }
-}
 
         stage('Build Docker Image') {
             steps {
@@ -39,39 +35,47 @@ stage('Prepare Variables') {
             }
         }
         
-stage('Test Image') {
-    steps {
-        script {
-            sh """
-                # Create test network
-                docker network create test-network || true
-                
-                # Run MySQL container
-                docker run -d --network test-network --name test-mysql \
-                  -e MYSQL_ROOT_PASSWORD=testpass \
-                  -e MYSQL_DATABASE=testdb \
-                  -e MYSQL_USER=testuser \
-                  -e MYSQL_PASSWORD=testpass \
-                  mysql:5.7
-                  
-                sleep 15
-                
-                # Run app container
-                docker run -d --network test-network --name test-app \
-                  ${IMAGE_NAME}:latest
-                  
-                sleep 10
-                
-                # Get container IP
-                APP_IP=\$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' test-app)
-                
-                echo "Testing app at \$APP_IP"
-                
-                curl -f http://\$APP_IP || exit 1
-            """
+        stage('Test Image') {
+            steps {
+                script {
+                    sh """
+                        # Create test network
+                        docker network create test-network || true
+                        
+                        # Start MySQL
+                        docker run -d --network test-network --name test-mysql \
+                          -e MYSQL_ROOT_PASSWORD=testpass \
+                          -e MYSQL_DATABASE=testdb \
+                          -e MYSQL_USER=testuser \
+                          -e MYSQL_PASSWORD=testpass \
+                          mysql:5.7
+                          
+                        # Give MySQL time to initialize
+                        sleep 20
+                        
+                        # Start App WITH DB variables
+                        docker run -d --network test-network --name test-app \
+                          -e DB_HOST=test-mysql \
+                          -e DB_USER=testuser \
+                          -e DB_PASSWORD=testpass \
+                          -e DB_NAME=testdb \
+                          ${IMAGE_NAME}:latest
+                          
+                        sleep 15
+                        
+                        # Debug logs (very useful in CI)
+                        docker logs test-app || true
+                        
+                        # Get container IP
+                        APP_IP=\$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' test-app)
+                        
+                        echo "Testing app at \$APP_IP"
+                        
+                        curl -f --max-time 20 http://\$APP_IP || exit 1
+                    """
+                }
+            }
         }
-    }
-}
         
         stage('Push to Docker Hub') {
             steps {

@@ -1,16 +1,19 @@
-<?php 
+<?php
 session_start();
 
-
-$servername = "musing_swanson";
-$username = "tooling_user";
-$password = "tooling_pass";
-$dbname = "toolingdb";
+// Use environment variables (set in Docker run)
+$servername = getenv('DB_HOST') ?: '127.0.0.1';
+$username   = getenv('DB_USER') ?: 'root';
+$password   = getenv('DB_PASSWORD') ?: '';
+$dbname     = getenv('DB_NAME') ?: 'toolingdb';
 
 // connect to database
-// $db = mysqli_connect('127.0.0.1', 'admin', 'admin', 'tooling');
 $db = new mysqli($servername, $username, $password, $dbname);
 
+// Check connection
+if ($db->connect_error) {
+    die("Connection failed: " . $db->connect_error);
+}
 // Check connection
 // if (mysqli_connect_errno()) {
 // echo "Failed to connect to MySQL: " . mysqli_connect_error();
