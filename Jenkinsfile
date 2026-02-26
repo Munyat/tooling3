@@ -42,7 +42,7 @@ stage('Test Image') {
                 set -e
 
                 echo "Creating test network..."
-                docker network create test-network || echo "Network exists"
+                docker network create test-network || echo "Network already exists"
 
                 echo "Starting MySQL container..."
                 docker run -d --network test-network --name test-mysql \\
@@ -59,21 +59,31 @@ stage('Test Image') {
                 done
 
                 echo "Starting App container..."
-                docker run -d --network test-network --name test-app -p 8080:80 \\
+                docker run -d --network test-network --name test-app \\
                   -e DB_HOST=test-mysql \\
                   -e DB_USER=testuser \\
                   -e DB_PASSWORD=testpass \\
                   -e DB_NAME=testdb \\
                   ${IMAGE_NAME}:latest
 
-                echo "Waiting for app to be ready..."
-                until curl -s http://localhost:8080 > /dev/null; do
-                  echo "Waiting for app..."
-                  sleep 2
-                done
+                # Wait for Apache inside container to start
+                echo "Waiting for App to start..."
+                sleep 5
 
-                echo "Testing app..."
-                curl -f http://localhost:8080
+                # Get App container IP on Docker network
+                APP_IP=\$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' test-app)
+                echo "Testing app at \$APP_IP"
+
+                # Retry curl until the app responds (timeout 20s per try, max 10 tries)
+                for i in {1..10}; do
+                    if curl -f --max-time 20 http://\$APP_IP; then
+                        echo "App is reachable!"
+                        break
+                    else
+                        echo "App not ready yet, retrying..."
+                        sleep 2
+                    fi
+                done
             """
         }
     }
