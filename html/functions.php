@@ -2,10 +2,10 @@
 session_start();
 
 // Use environment variables (set in Docker run)
-$servername = getenv('DB_HOST') ?: '127.0.0.1';
-$username   = getenv('DB_USER') ?: 'root';
-$password   = getenv('DB_PASSWORD') ?: '';
-$dbname     = getenv('DB_NAME') ?: 'toolingdb';
+$servername = getenv('DB_HOST') ?: 'db';
+$username   = getenv('DB_USER') ?: 'MYSQL_USER';
+$password   = getenv('DB_PASSWORD') ?: 'MYSQL_PASSWORD';
+$dbname     = getenv('DB_NAME') ?: 'tooling-db';
 
 // connect to database
 $db = new mysqli($servername, $username, $password, $dbname);

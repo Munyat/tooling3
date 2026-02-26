@@ -1,0 +1,53 @@
+version: "3.9"
+
+services:
+  # Frontend service - Tooling Application
+  tooling_frontend:
+    build: .
+    container_name: tooling-frontend
+    ports:
+      - "5000:80"
+    volumes:
+      - tooling_frontend:/var/www/html
+    networks:
+      - tooling_network
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - DB_HOST=db
+      - DB_USER=tooling_user
+      - DB_PASSWORD=tooling_pass
+      - DB_NAME=toolingdb
+    restart: always
+
+  # Database service - MySQL
+  db:
+    image: mysql:5.7
+    container_name: tooling-db
+    restart: always
+    environment:
+      MYSQL_DATABASE: toolingdb
+      MYSQL_USER: tooling_user
+      MYSQL_PASSWORD: tooling_pass
+      MYSQL_ROOT_PASSWORD: rootpassword
+    volumes:
+      - db_data:/var/lib/mysql
+      - ./tooling-db.sql:/docker-entrypoint-initdb.d/schema.sql
+    networks:
+      - tooling_network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+# Named volumes for persistent data
+volumes:
+  tooling_frontend:
+  db_data:
+
+# Custom network
+networks:
+  tooling_network:
+    driver: bridge
