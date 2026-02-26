@@ -39,10 +39,10 @@ stage('Test Image') {
     steps {
         script {
             sh """
-                set -e  # Exit immediately if a command fails
+                set -e
 
                 echo "Creating test network..."
-                docker network create test-network || echo "Network already exists"
+                docker network create test-network || echo "Network exists"
 
                 echo "Starting MySQL container..."
                 docker run -d --network test-network --name test-mysql \\
@@ -52,32 +52,28 @@ stage('Test Image') {
                   -e MYSQL_PASSWORD=testpass \\
                   mysql:5.7
 
-                echo "Waiting for MySQL to initialize..."
-                sleep 20
+                echo "Waiting for MySQL to be ready..."
+                until docker exec test-mysql mysqladmin ping -u root -ptestpass --silent; do
+                  echo "Waiting for MySQL..."
+                  sleep 2
+                done
 
                 echo "Starting App container..."
-                docker run -d --network test-network --name test-app \\
+                docker run -d --network test-network --name test-app -p 8080:80 \\
                   -e DB_HOST=test-mysql \\
                   -e DB_USER=testuser \\
                   -e DB_PASSWORD=testpass \\
                   -e DB_NAME=testdb \\
                   ${IMAGE_NAME}:latest
 
-                # Wait a few seconds for the app to start
-                sleep 10
-
-                # Ensure network exists (retry loop)
-                until docker network inspect test-network > /dev/null 2>&1; do
-                  echo "Waiting for test-network..."
-                  sleep 1
+                echo "Waiting for app to be ready..."
+                until curl -s http://localhost:8080 > /dev/null; do
+                  echo "Waiting for app..."
+                  sleep 2
                 done
 
-                # Get App container IP
-                APP_IP=\$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' test-app)
-                echo "Testing app at \$APP_IP"
-
-                # Test the app is reachable
-                curl -f http://\$APP_IP || (echo "App test failed!" && exit 1)
+                echo "Testing app..."
+                curl -f http://localhost:8080
             """
         }
     }
