@@ -34,35 +34,39 @@ pipeline {
             }
         }
         
-        stage('Test Image') {
-            steps {
-                script {
-                    sh """
-                        # Create test network if not exists
-                        docker network create test-network || true
-                        
-                        # Run MySQL test container
-                        docker run -d --network test-network --name test-mysql \
-                          -e MYSQL_ROOT_PASSWORD=testpass \
-                          -e MYSQL_DATABASE=testdb \
-                          -e MYSQL_USER=testuser \
-                          -e MYSQL_PASSWORD=testpass \
-                          mysql:5.7
-                          
-                        sleep 15
-                        
-                        # Run app container (NO port mapping needed)
-                        docker run -d --network test-network --name test-app \
-                          ${IMAGE_NAME}:latest
-                          
-                        sleep 10
-                        
-                        # Test endpoint using container name (Docker DNS)
-                        curl -f http://test-app || exit 1
-                    """
-                }
-            }
+stage('Test Image') {
+    steps {
+        script {
+            sh """
+                # Create test network
+                docker network create test-network || true
+                
+                # Run MySQL container
+                docker run -d --network test-network --name test-mysql \
+                  -e MYSQL_ROOT_PASSWORD=testpass \
+                  -e MYSQL_DATABASE=testdb \
+                  -e MYSQL_USER=testuser \
+                  -e MYSQL_PASSWORD=testpass \
+                  mysql:5.7
+                  
+                sleep 15
+                
+                # Run app container
+                docker run -d --network test-network --name test-app \
+                  ${IMAGE_NAME}:latest
+                  
+                sleep 10
+                
+                # Get container IP
+                APP_IP=\$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' test-app)
+                
+                echo "Testing app at \$APP_IP"
+                
+                curl -f http://\$APP_IP || exit 1
+            """
         }
+    }
+}
         
         stage('Push to Docker Hub') {
             steps {
