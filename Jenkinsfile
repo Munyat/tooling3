@@ -13,15 +13,20 @@ pipeline {
             }
         }
         
-        stage('Prepare Variables') {
-            steps {
-                script {
-                    BRANCH_NAME = env.BRANCH_NAME ?: 'main'
-                    GIT_COMMIT_SHORT = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
-                    IMAGE_TAG = "${BRANCH_NAME}-${GIT_COMMIT_SHORT}"
-                }
-            }
+stage('Prepare Variables') {
+    steps {
+        script {
+            BRANCH_NAME = env.BRANCH_NAME ?: 'main'
+            
+            // Replace slashes with dash for Docker compatibility
+            SAFE_BRANCH_NAME = BRANCH_NAME.replaceAll('/', '-')
+            
+            GIT_COMMIT_SHORT = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
+            
+            IMAGE_TAG = "${SAFE_BRANCH_NAME}-${GIT_COMMIT_SHORT}"
         }
+    }
+}
 
         stage('Build Docker Image') {
             steps {
